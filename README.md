@@ -9,7 +9,8 @@
 
 <h1 align="center">Melone</h1>
 
-<p align="center">A local-first memory engine for your desktop. Melone records what happens on your Mac — screen, keyboard, mouse — turns it into searchable episodes, and makes that memory available to your AI agents over MCP.</p>
+<p align="center">A local-first memory engine for your desktop.</p>
+<p align="center">Melone records what happens on your desktop, turns it into a searchable memory graph, and makes it available to your AI agents. </p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/status-pre--release-orange?style=for-the-badge" alt="status">
