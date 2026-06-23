@@ -36,7 +36,7 @@
 
 - [ ] **Melone MVP** — local, macOS, open-source
 - [ ] **Melone Cloud** — optional cloud sync & multi-device
-- [ ] **Clone user model** — a model that predicts what you'd do next
+- [ ] **Clone-0** — user model that predicts what you'd do next
 
 ## About
 
