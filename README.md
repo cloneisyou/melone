@@ -15,7 +15,6 @@
 <p align="center">
   <img src="https://img.shields.io/badge/status-pre--release-orange?style=for-the-badge" alt="status">
   <img src="https://img.shields.io/badge/platform-macOS-black?style=for-the-badge" alt="platform">
-  <img src="https://img.shields.io/badge/license-TBD-lightgrey?style=for-the-badge" alt="license">
 </p>
 
 <p align="center">🚧 <b>Pre-release.</b> The open-source release is coming soon. ⭐ Star this repo to get notified.</p>
@@ -34,7 +33,7 @@
 
 ## Roadmap
 
-- [ ] **Melone MVP** — local, macOS, open-source
+- [x] **Melone MVP** — local, macOS, open-source
 - [ ] **Melone Cloud** — optional cloud sync & multi-device
 - [ ] **Clone-0** — user model that predicts what you'd do next
 
@@ -46,4 +45,4 @@ Melone is built by [Clone](https://clone.is). Clone builds user models that sit 
 
 ## License
 
-To be announced at release.
+This repository is licensed under the Clone Commercial License.
