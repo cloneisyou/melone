@@ -1,0 +1,5 @@
+node_modules/
+dist/
+out/
+# CI stages the bundled PyInstaller daemon here before electron-builder runs.
+resources/

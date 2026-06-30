@@ -1,0 +1,24 @@
+.venv/
+.env
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# PyInstaller daemon bundle (apps/service)
+apps/service/build/
+apps/service/dist/
+apps/service/*.spec
+
+docs/dev/*
+docs/prod/*
+!docs/dev/vlm-ocr-bm25-context-rank-plan.md
+.crack/
+
+node_modules/
+out/
+.pnpm-store/
+
+# macOS Finder metadata
+.DS_Store
+.pnpm-store/

@@ -1,0 +1,110 @@
+/*
+ * Melone design tokens (docs/prod/desktop-plan.md "design system").
+ * Screens use these tokens only — no hardcoded colors or sizes.
+ * Tokens and base styles only; component styles live in styles/app.css.
+ */
+
+/* Wordmark display face — bundled (assets/fonts) so it works offline and under
+ * the app's strict CSP. Poiret One, single weight, ~8KB latin subset. */
+@font-face {
+  font-family: 'Poiret One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/poiret-one-latin.woff2') format('woff2');
+}
+
+:root {
+  /* ── Color palette ────────────────────────────────────────────────────────
+   * Cursor-derived warm editorial scale (getdesign.md cursor DESIGN.md): cream
+   * canvas, warm ink, hairline-only depth — no shadows. Light values here; the
+   * [data-theme='dark'] block below overrides the same names. Components read
+   * these tokens only (no hardcoded colors). */
+
+  /* Canvas & raised surfaces */
+  --bg: #F7F7F4;
+  --surface: #FFFFFF;
+  --surface-hover: #EFEEE8; /* one neutral step off --surface */
+
+  /* Hairline borders (the only depth cue) */
+  --border: #E6E5E0;
+  --border-strong: #CFCDC4;
+
+  /* Ink */
+  --text: #26251E;
+  --text-muted: #807D72;
+
+  /* Semantic state accents — used for live/affirmative, caution, and failure.
+   * --accent is melone green (memory firing), a soft sage on the warm scale. */
+  --accent: #a3c585;
+  --warn: #C08532;
+  --error: #CF2D56;
+
+  /* ── Fonts ────────────────────────────────────────────────────────────────
+   * Sans is the default voice for all UI/prose/data; the wordmark uses a
+   * bundled display face (Poiret One, @font-face above) as a one-off override. */
+
+  /* OS system sans — renders as SF Pro on macOS (primary target); Korean falls
+   * back Apple SD Gothic Neo → Pretendard. */
+  --font-sans: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI",
+    "Apple SD Gothic Neo", "Pretendard Variable", "Malgun Gothic", sans-serif;
+
+  /* Wordmark only; sans fallback until the bundled face loads. */
+  --font-wordmark: 'Poiret One', var(--font-sans);
+
+  /* ── Typography ────────────────────────────────────────────────────────────
+   * One strict hierarchy, five levels, largest → smallest. Each role is a
+   * self-contained `font` shorthand (weight size/line-height family); apply with
+   * `font: var(--type-x)` — never a raw size. Sans is the only family here; two
+   * orthogonal modifiers are added next to a level, never as their own level:
+   *   - font-family: var(--font-wordmark)     → the wordmark face (Poiret One)
+   *     (wordmark = display level + the wordmark face)
+   *   - font-variant-numeric: tabular-nums    → numeric columns (scores, counts)
+   * Weight 400 at display size follows Cursor's editorial voice (no bold display). */
+  --type-display: 400 30px/1.2 var(--font-sans); /* wordmark, hero figures */
+  --type-title: 600 18px/1.3 var(--font-sans); /* section titles */
+  --type-body: 400 13px/1.5 var(--font-sans); /* reading text, tabs, results */
+  --type-label: 500 12px/1.4 var(--font-sans); /* buttons, menu items, subheads */
+  --type-caption: 400 11px/1.4 var(--font-sans); /* captions, paths, scores, logs */
+
+  /* ── Shape & chrome ────────────────────────────────────────────────────────
+   * Hairline-only depth (no shadows). 8px radius is Cursor's compact CTA
+   * dialect; the search bar alone uses --radius-pill. */
+  --radius: 8px;
+  --radius-pill: 999px;
+}
+
+/* Dark theme — warm inversion of the same Cursor scale (ink canvas, cream text),
+ * following the ink-inversion cue from Cursor's featured pricing card. */
+[data-theme='dark'] {
+  --bg: #1B1A16;
+  --surface: #26251E;
+  --border: #3A382F;
+  --border-strong: #4C4A40;
+  --text: #F7F7F4;
+  --text-muted: #A09C92;
+  --accent: #b3cf99;
+  --warn: #D9A050;
+  --error: #E25D75;
+  --surface-hover: #2F2E27;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: var(--type-body);
+  -webkit-font-smoothing: antialiased;
+  /* Frameless shell: scrolling happens only inside .shell-content */
+  overflow: hidden;
+}

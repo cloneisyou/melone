@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+# Pin discovery to the package so sibling dirs (tests/, pyinstaller/) don't trip
+# setuptools' flat-layout auto-discovery ("multiple top-level packages").
+[tool.setuptools.packages.find]
+include = ["melone_service*"]
+
+[project]
+name = "melone-service"
+version = "0.1.0"
+description = "Local activity context service for Melone."
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0",
+    "numpy>=1.26",
+    "pillow>=10",
+    "pyobjc-framework-Cocoa>=10; platform_system == 'Darwin'",
+    "pyobjc-framework-Quartz>=10; platform_system == 'Darwin'",
+    "pyobjc-framework-ApplicationServices>=10; platform_system == 'Darwin'",
+    "pyobjc-framework-Vision>=10; platform_system == 'Darwin'",
+    "python-dotenv>=1.0",
+    "tomlkit>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+]
+semantic = [
+    "sentence-transformers>=3.0",
+]
+
+[project.scripts]
+melone = "melone_service.cli:main"
+melone-mcp = "melone_service.mcp.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

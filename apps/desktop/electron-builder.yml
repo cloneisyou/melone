@@ -1,0 +1,80 @@
+# electron-builder packaging + publish config.
+# - Builds the electron-vite output (out/) into signed/notarized macOS artifacts
+#   and an unsigned Windows NSIS installer.
+# - Bundles the standalone PyInstaller daemon (CI stages it into resources/melone-daemon)
+#   so a single install ships the Electron shell + Python service, updated atomically.
+# - Channel + releaseType are injected per-build by the release workflow
+#   (-c.publish.channel=beta|latest, -c.publish.releaseType=draft).
+appId: com.cloneisyou.melone
+productName: Melone
+copyright: Copyright © 2026 cloneisyou
+artifactName: Melone-${arch}.${ext}
+
+directories:
+  output: dist
+  buildResources: build
+
+# Exclusion-based file set (electron-vite convention): keeps out/ + package.json +
+# pruned production node_modules (electron-updater is externalized, so it must ship),
+# drops dev-only sources/configs.
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!tests/*'
+  - '!resources/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{.eslintrc.cjs,.eslintignore,.prettierrc,.prettierignore,.editorconfig}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml,pnpm-workspace.yaml}'
+  - '!electron-builder.yml'
+
+# The standalone Python daemon, placed outside the asar so it can be executed.
+# CI stages the PyInstaller onedir output here before packaging.
+extraResources:
+  - from: resources/melone-daemon
+    to: melone-daemon
+
+mac:
+  # Pre-built from assets/melone_logo.png by scripts/round-app-icon.mjs (the same
+  # single source as the runtime icon). Pre-built so electron-builder's WASM icon
+  # converter is not invoked.
+  icon: build/icon.icns
+  category: public.app-category.productivity
+  target:
+    - target: zip # required for Squirrel.Mac in-place auto-update
+      arch: [arm64]
+    - target: dmg # first-install download
+      arch: [arm64]
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true # uses APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER from env
+
+dmg:
+  sign: false # the .app inside is signed; the DMG wrapper need not be
+
+win:
+  # Pre-built multi-size .ico (installer, installed .exe, taskbar, Add/Remove
+  # Programs) from the same assets/melone_logo.png. See scripts/round-app-icon.mjs.
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  # No certificate config => unsigned. Build/publish still succeed (SmartScreen warns).
+
+nsis:
+  artifactName: Melone-Setup.${ext}
+  oneClick: true
+  perMachine: false # per-user install => silent auto-update without UAC
+  # Custom hooks kill the bundled daemon before install/uninstall — the default
+  # template only stops Melone.exe, leaving melone-daemon.exe holding the DB/file.
+  include: build/installer.nsh
+
+publish:
+  provider: github
+  owner: cloneisyou
+  repo: melone
+
+# Emit beta*.yml alongside latest*.yml so the beta channel has a feed manifest.
+generateUpdatesFilesForAllChannels: true

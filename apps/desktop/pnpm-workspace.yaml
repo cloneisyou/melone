@@ -1,0 +1,8 @@
+overrides:
+  '@posthog/core': 1.35.3
+
+allowBuilds:
+  core-js: false
+  electron: true
+  electron-winstaller: false
+  esbuild: true

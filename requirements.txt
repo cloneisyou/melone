@@ -1,0 +1,5 @@
+-e ./apps/service[dev]
+pyobjc-framework-Cocoa>=10; platform_system == "Darwin"
+pyobjc-framework-Quartz>=10; platform_system == "Darwin"
+pyobjc-framework-ApplicationServices>=10; platform_system == "Darwin"
+pyobjc-framework-Vision>=10; platform_system == "Darwin"
