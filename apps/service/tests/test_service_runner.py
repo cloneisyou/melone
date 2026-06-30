@@ -9,6 +9,7 @@ from melone_service.main import (
     _create_collectors,
     _record_activity_state,
     get_process_state,
+    kill_service,
     start_service,
     stop_service,
 )
@@ -63,6 +64,33 @@ def test_stop_service_when_not_running_is_noop(tmp_path):
     config = _test_config(tmp_path)
 
     result = stop_service(config)
+
+    assert result.stopped is False
+    assert result.pid is None
+    assert result.was_running is False
+
+
+def test_kill_service_sigkills_running_process_and_frees_locks(tmp_path):
+    config = _test_config(tmp_path)
+
+    result = start_service(config, permission_checker=_granted_permissions)
+    assert result.started is True
+
+    kill_result = kill_service(config)
+
+    # kill_service only returns once the process is gone AND its lock is
+    # released, so the state is immediately not-running (no extra wait needed)
+    # and the next launch can't race a dying collector for the SQLite lock.
+    assert kill_result.stopped is True
+    assert kill_result.was_running is True
+    assert get_process_state(config).is_running is False
+    assert not config.pid_file_path.exists()
+
+
+def test_kill_service_when_not_running_is_noop(tmp_path):
+    config = _test_config(tmp_path)
+
+    result = kill_service(config)
 
     assert result.stopped is False
     assert result.pid is None

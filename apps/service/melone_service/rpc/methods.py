@@ -57,18 +57,12 @@ from melone_service.settings import (
 from melone_service.store.events import EventRepository
 from melone_service.store.migrations import read_applied_version
 
-# The error vocabulary lives in rpc/errors.py — import codes from there directly
-# rather than re-exporting them here.
 __all__ = ["RpcError", "HANDLERS", "dispatch"]
 
-# Upper bounds for client-supplied integers — large values only waste work or
-# overflow timedelta, so reject them at the boundary.
 MAX_SINCE_MINUTES = 5_256_000  # 10 years
 MAX_LIMIT = 10_000
 
-# rank/timeline defaults come from queries (shared with the MCP tools). Graph
-# and search defaults are RPC-only: the graph view draws more nodes than rank,
-# and the search UI uses a tighter window than the recall-biased MCP search.
+# rank/timeline defaults come from queries (shared with the MCP tools).
 DEFAULT_GRAPH_LIMIT = 60
 DEFAULT_SEARCH_SINCE_MINUTES = 120
 DEFAULT_SEARCH_LIMIT = 5
@@ -95,16 +89,13 @@ def dispatch(method: str, params: object) -> object:
     except RpcError:
         raise
     except ConfigParseError as error:
-        # Propagate the never-write-on-parse-failure signal from setup as-is.
         raise RpcError(CONFIG_PARSE_ERROR, "CONFIG_PARSE_ERROR", str(error)) from error
     except OverflowError as error:
-        # Safety net for out-of-range integers that slip past validation.
         raise RpcError(
             INVALID_PARAMS, "INVALID_PARAMS", "파라미터가 허용 범위를 벗어났습니다"
         ) from error
     except sqlite3.Error as error:
         # DB errors (e.g. lock contention with the collector) map to SERVICE_ERROR.
-        # error.data stays generic; the raw exception goes to stderr only.
         traceback.print_exc(file=sys.stderr)
         raise RpcError(
             SERVICE_ERROR, "SERVICE_ERROR", "데이터베이스 조회 중 오류가 발생했습니다"
@@ -112,7 +103,6 @@ def dispatch(method: str, params: object) -> object:
 
 
 def ping(params: dict[str, object]) -> dict[str, object]:
-    # Electron handshake health check — version diagnoses shell/daemon mismatch.
     return {"version": __version__}
 
 
@@ -168,6 +158,21 @@ def service_stop(params: dict[str, object]) -> dict[str, object]:
 
     try:
         result = main.stop_service()
+    except (RuntimeError, OSError) as error:
+        raise RpcError(SERVICE_ERROR, "SERVICE_ERROR", str(error)) from error
+    return {"stopped": result.stopped}
+
+
+def service_kill(params: dict[str, object]) -> dict[str, object]:
+    # Immediate, uninterruptible collector stop for app quit / auto-update
+    # restart. SIGKILLs the collector and confirms its locks are released, so
+    # the shell can quit/relaunch without orphaning the SQLite lock. Distinct
+    # from service.stop (graceful SIGTERM drain) used by the CLI.
+    _require_darwin("service.kill")
+    from melone_service import main
+
+    try:
+        result = main.kill_service()
     except (RuntimeError, OSError) as error:
         raise RpcError(SERVICE_ERROR, "SERVICE_ERROR", str(error)) from error
     return {"stopped": result.stopped}
@@ -350,6 +355,30 @@ def _sync_skill(params: dict[str, object], *, enable: bool) -> None:
         pass
 
 
+def agent_transcript(params: dict[str, object]) -> dict[str, object]:
+    # Melone server에 보내는 jsonl 읽어오는 함수 => sqlite는 live-sync 아님으로 jsonl 읽어옴
+    path = _opt_str(params, "path")
+    session_id = _opt_str(params, "sessionId")
+    connector = _opt_str(params, "connector")
+    cwd = _opt_str(params, "cwd")
+    from melone_service.asset.resolvers import agent_sessions
+
+    target = agent_sessions.locate_transcript(
+        path=path, session_id=session_id, connector=connector, cwd=cwd
+    )
+    if target is None:
+        raise RpcError(
+            SERVICE_ERROR, "SERVICE_ERROR", "활성 에이전트 세션을 찾지 못했습니다"
+        )
+    messages = agent_sessions.read_transcript(target["path"], target["connector"])
+    return {
+        "connector": target["connector"],
+        "conversationId": target["conversation_id"],
+        "cwd": target["cwd"],
+        "messages": messages,
+    }
+
+
 def events_add_sample(params: dict[str, object]) -> dict[str, object]:
     # Seeds a sample event so the query views can be exercised on Windows dev setups.
     event = sample_event()
@@ -370,6 +399,7 @@ HANDLERS: dict[str, Callable[[dict[str, object]], object]] = {
     "service.status": service_status,
     "service.start": service_start,
     "service.stop": service_stop,
+    "service.kill": service_kill,
     "service.pause": service_pause,
     "service.resume": service_resume,
     "screenText.status": screen_text_status,
@@ -381,6 +411,7 @@ HANDLERS: dict[str, Callable[[dict[str, object]], object]] = {
     "context.timeline": context_timeline,
     "screen.previews": screen_previews,
     "scene.timeline": scene_timeline,
+    "agent.transcript": agent_transcript,
     "storage.stats": storage_stats,
     "mcp.status": mcp_status,
     "mcp.enable": mcp_enable,
@@ -397,6 +428,18 @@ def _require_darwin(method: str) -> None:
             "NOT_SUPPORTED_ON_PLATFORM",
             f"{method}는 macOS에서만 지원됩니다 (현재: {sys.platform})",
         )
+
+
+def _opt_str(params: dict[str, object], key: str) -> str | None:
+    # Optional string param: absent/None -> None, otherwise a non-empty string.
+    value = params.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise RpcError(
+            INVALID_PARAMS, "INVALID_PARAMS", f"{key}는 비어 있지 않은 문자열이어야 합니다"
+        )
+    return value.strip()
 
 
 def _positive_int(

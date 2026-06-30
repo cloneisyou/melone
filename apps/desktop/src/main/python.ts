@@ -1,7 +1,5 @@
 /*
- * Python RPC daemon supervisor — spawn, exponential-backoff respawn, shutdown cleanup.
- * Imports no Electron modules: values like app.isPackaged are injected by the
- * caller (index.ts), keeping the pure logic testable in vitest.
+ * Python RPC daemon supervisor
  */
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -24,9 +22,7 @@ const SHUTDOWN_TIMEOUT_MS = 3000
 
 /**
  * Delay before the nth consecutive respawn (pure function).
- * Grows 1s -> 2s -> 4s and caps at 4s; past MAX_RESPAWN_ATTEMPTS it returns
- * null (give up = bridge down). A successful ping makes the caller reset the
- * failure counter so the next failure starts at 1s again.
+ * Grows 1s -> 2s -> 4s and caps at 4s; past MAX_RESPAWN_ATTEMPTS
  */
 export function respawnDelayMs(failureCount: number): number | null {
   if (failureCount < 1 || failureCount > MAX_RESPAWN_ATTEMPTS) return null
@@ -75,9 +71,6 @@ export interface DaemonSpawn {
 
 /**
  * Resolve how to spawn the RPC daemon (pure function).
- * Packaged builds run the bundled standalone PyInstaller executable (the user has
- * no Python, and it is not a module so it takes no `-m` args). Dev runs the
- * resolved python with `-m melone_service.rpc`.
  */
 export function resolveDaemonSpawn(options: ResolveDaemonOptions): DaemonSpawn {
   if (options.isPackaged && options.resourcesPath !== null) {
@@ -145,9 +138,7 @@ export interface PythonBridgeOptions {
   args?: string[]
   cwd?: string
   requestTimeoutMs?: number
-  /** Test injection point. Defaults to child_process.spawn. */
   spawnFn?: typeof spawn
-  /** Test injection point. Defaults to a taskkill /T (win) | SIGKILL tree-kill. */
   killTree?: (child: ChildProcess) => void
 }
 
@@ -244,13 +235,10 @@ export class PythonBridge {
   }
 
   /**
-   * Graceful shutdown for app quit / auto-update install. On macOS, ask the
-   * daemon to stop the collector it spawned FIRST (`service.stop`) so the
-   * collector cannot outlive the daemon holding the SQLite lock; then close
-   * stdin (the daemon self-exits on EOF, running its own collector cleanup as a
-   * backstop) and wait for it to exit, force/tree-killing only if it overstays.
-   * `service.stop` rejects off macOS / when not running — fine, it is
-   * best-effort. Call once on quit.
+   * Immediate shutdown for app quit / auto-update install.
+   * Any in-flight OCR dies at once and the collector
+   * `service.kill` only resolves once the collector is gone and its locks are released.
+   * `service.kill` is best-effort. Call once on quit.
    */
   async shutdown(timeoutMs: number = SHUTDOWN_TIMEOUT_MS): Promise<void> {
     this.stopping = true
@@ -260,14 +248,12 @@ export class PythonBridge {
     }
     const child = this.child
     this.child = null
-    // No daemon (down/disabled): nothing to stop and no RPC channel, so skip the
-    // service.stop round-trip entirely and return at once.
     if (child === null) {
       this.client.detach('앱 종료')
       return
     }
-    const stopRequest = this.client.request('service.stop').catch(() => undefined)
-    await Promise.race([stopRequest, delayResolve(timeoutMs)])
+    const killRequest = this.client.request('service.kill').catch(() => undefined)
+    await Promise.race([killRequest, delayResolve(timeoutMs)])
     this.client.detach('앱 종료')
     child.stdin?.end()
     if (!(await waitForExit(child, timeoutMs))) this.killTree(child)

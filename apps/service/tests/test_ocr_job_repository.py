@@ -46,6 +46,78 @@ def test_create_pending_job_persists_worker_contract_fields(tmp_path):
         connection.close()
 
 
+def test_reclaim_running_jobs_requeues_orphaned_jobs_without_counting_attempts(tmp_path):
+    database_path = tmp_path / "melone.sqlite"
+    initialize_database(database_path)
+
+    connection = connect(database_path)
+    try:
+        repository = OcrJobRepository(connection)
+        _insert_screen_session_and_frame(connection)
+
+        repository.create_pending_job(
+            job_id="ocr_job_running",
+            job_type="frame_ocr",
+            target_id="screen_frame_1",
+            frame_id="screen_frame_1",
+            session_id="screen_session_1",
+            source_key="github:repo:cloneisyou/melone",
+            retrieval_locator="url:https://github.com/cloneisyou/melone/pulls",
+            now=NOW,
+        )
+        # Simulate a process that locked the job (status -> 'running') but was
+        # SIGKILLed mid-flight before it could finish.
+        locked = repository.lock_due_job(now=NOW)
+        assert locked is not None and locked.status == "running"
+
+        reclaimed = repository.reclaim_running_jobs(now=LATER)
+
+        assert reclaimed == 1
+        job = repository.get_job("ocr_job_running")
+        assert job is not None
+        assert job.status == "pending"
+        assert job.locked_at is None
+        # Due immediately on the next launch, and the interruption did not burn a
+        # retry attempt.
+        assert job.next_run_at == LATER
+        assert job.attempts == 0
+        # And it is now selectable again.
+        assert repository.lock_due_job(now=FUTURE) is not None
+    finally:
+        connection.close()
+
+
+def test_reclaim_running_jobs_leaves_non_running_jobs_untouched(tmp_path):
+    database_path = tmp_path / "melone.sqlite"
+    initialize_database(database_path)
+
+    connection = connect(database_path)
+    try:
+        repository = OcrJobRepository(connection)
+        _insert_screen_session_and_frame(connection)
+
+        repository.create_pending_job(
+            job_id="ocr_job_pending",
+            job_type="frame_ocr",
+            target_id="screen_frame_1",
+            frame_id="screen_frame_1",
+            session_id="screen_session_1",
+            source_key="github:repo:cloneisyou/melone",
+            retrieval_locator="url:https://github.com/cloneisyou/melone/pulls",
+            now=NOW,
+        )
+
+        reclaimed = repository.reclaim_running_jobs(now=LATER)
+
+        assert reclaimed == 0
+        job = repository.get_job("ocr_job_pending")
+        assert job is not None
+        assert job.status == "pending"
+        assert job.next_run_at == NOW
+    finally:
+        connection.close()
+
+
 def _insert_screen_session_and_frame(connection):
     with connection:
         connection.execute(

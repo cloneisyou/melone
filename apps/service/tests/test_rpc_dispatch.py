@@ -406,6 +406,14 @@ def test_service_stop_not_supported_off_macos():
     assert excinfo.value.code == errors.NOT_SUPPORTED_ON_PLATFORM
 
 
+@pytest.mark.skipif(sys.platform == "darwin", reason="exercises the non-darwin branch")
+def test_service_kill_not_supported_off_macos():
+    with pytest.raises(RpcError) as excinfo:
+        dispatch("service.kill", {})
+
+    assert excinfo.value.code == errors.NOT_SUPPORTED_ON_PLATFORM
+
+
 # --- context.current / context.rank ---
 
 

@@ -72,6 +72,7 @@ from .pipeline.screen_search_scheduler import (
 )
 from .store.db import connect, initialize_database
 from .store.events import EventRepository
+from .store.ocr_jobs import OcrJobRepository
 from .store.screen import ScreenRepository
 
 
@@ -79,6 +80,7 @@ logger = logging.getLogger(__name__)
 SERVICE_LOG_NAME = "service.log"
 START_TIMEOUT_SECONDS = 5.0
 STOP_TIMEOUT_SECONDS = 5.0
+KILL_TIMEOUT_SECONDS = 2.0 # lock 해제 확인
 PERMISSIONS_CHECKED_ENV = "MELONE_PERMISSIONS_CHECKED"
 
 
@@ -175,9 +177,6 @@ def run_service(
 
 
 def _service_command() -> list[str]:
-    # The collector runs as a child of sys.executable. A frozen PyInstaller
-    # binary cannot honor `-m module`, so it dispatches on a subcommand
-    # (rpc/__main__.py: "service"); a real dev interpreter uses `-m`.
     if getattr(sys, "frozen", False):
         return [sys.executable, "service"]
     return [sys.executable, "-m", "melone_service.main"]
@@ -246,7 +245,7 @@ def stop_service(
 
     if not state.is_running:
         if state.is_stale:
-            _remove_pid_file(config.pid_file_path)
+            _remove_pid_file(config.pid_file_path, expected_pid=state.pid)
         return StopResult(stopped=False, pid=None, was_running=False)
 
     if state.pid is None:
@@ -263,10 +262,45 @@ def stop_service(
         state = get_process_state(config)
         if not state.is_running:
             if state.is_stale:
-                _remove_pid_file(config.pid_file_path)
+                _remove_pid_file(config.pid_file_path, expected_pid=state.pid)
             return StopResult(stopped=True, pid=state.pid, was_running=True)
 
         time.sleep(0.05)
+
+    return StopResult(stopped=False, pid=state.pid, was_running=True)
+
+
+def kill_service(
+    config: ServiceConfig | None = None,
+    *,
+    timeout_seconds: float = KILL_TIMEOUT_SECONDS,
+) -> StopResult:
+    config = load_config() if config is None else config
+    state = get_process_state(config)
+
+    if not state.is_running:
+        if state.is_stale:
+            _remove_pid_file(config.pid_file_path, expected_pid=state.pid)
+        return StopResult(stopped=False, pid=None, was_running=False)
+
+    if state.pid is None:
+        return StopResult(stopped=False, pid=None, was_running=True)
+
+    try:
+        os.kill(state.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        _remove_pid_file(config.pid_file_path, expected_pid=state.pid)
+        return StopResult(stopped=False, pid=state.pid, was_running=False)
+
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        state = get_process_state(config)
+        if not state.is_running:
+            if state.is_stale:
+                _remove_pid_file(config.pid_file_path, expected_pid=state.pid)
+            return StopResult(stopped=True, pid=state.pid, was_running=True)
+
+        time.sleep(0.02)
 
     return StopResult(stopped=False, pid=state.pid, was_running=True)
 
@@ -300,7 +334,11 @@ def _run_collector_loop(
     try:
         repository = EventRepository(connection)
         collectors = _create_collectors(repository, config)
-        # Start always begins actively recording — drop any leftover pause flag.
+        # 'running' 상태에서 종료되었으면 해당 OCR job 다시 queue
+        reclaimed = OcrJobRepository(connection).reclaim_running_jobs()
+        if reclaimed:
+            logger.info("reclaimed %d interrupted OCR job(s) for retry", reclaimed)
+
         clear_paused(config.pause_flag_path)
         _apply_screenshot_capture_policy(collectors, config)
         _poll_collectors(collectors, repository)
@@ -308,7 +346,6 @@ def _run_collector_loop(
         run_screen_search_workers_once(config, stop_event=stop_event, logger=logger)
 
         while not stop_event.wait(config.polling_interval_seconds):
-            # Pause skips collection without tearing down the daemon (RPC service.pause).
             if is_paused(config.pause_flag_path):
                 continue
             _apply_screenshot_capture_policy(collectors, config)
@@ -369,7 +406,7 @@ def _poll_collectors(
     for collector in collectors:
         try:
             events = collector.poll()
-        except Exception as exc:  # pragma: no cover - defensive service boundary
+        except Exception as exc:
             print(f"collector {collector.name} failed: {exc}", file=sys.stderr)
             continue
 

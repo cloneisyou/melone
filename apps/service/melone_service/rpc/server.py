@@ -89,8 +89,14 @@ def handle_request(request: object) -> dict[str, object]:
 
 
 def _stop_collector_on_exit() -> None:
-    """Stop the collector this daemon started so it cannot outlive the daemon
-    while holding the SQLite WAL lock.
+    """SIGKILL the collector this daemon started so it cannot outlive the daemon
+    while holding the SQLite WAL / process lock.
+
+    The daemon exits only on app quit / auto-update restart, so we want an
+    immediate, uninterruptible stop (kill_service) rather than the graceful
+    SIGTERM drain (stop_service) the CLI uses — any in-flight OCR is abandoned
+    and requeued on the next launch. kill_service confirms the locks are freed
+    before returning, so the relaunch can't race a dying collector.
 
     macOS-only: there is no collector on other platforms, and ``main`` cannot
     even be imported off darwin (it needs ``fcntl``). Best-effort — a failure
@@ -101,7 +107,7 @@ def _stop_collector_on_exit() -> None:
     try:
         from melone_service import main
 
-        main.stop_service()
+        main.kill_service()
     except Exception:  # noqa: BLE001
         traceback.print_exc(file=sys.stderr)
 

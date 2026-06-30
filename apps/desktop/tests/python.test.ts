@@ -398,8 +398,8 @@ describe('PythonBridge state machine', () => {
   })
 })
 
-// Graceful shutdown: stop the collector (service.stop) before tearing down the
-// daemon, then wait for exit and tree-kill only if it overstays.
+// Immediate shutdown: SIGKILL the collector (service.kill) before tearing down
+// the daemon, then wait for exit and tree-kill only if it overstays.
 describe('PythonBridge.shutdown', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -430,7 +430,7 @@ describe('PythonBridge.shutdown', () => {
     return { bridge, children, killTree }
   }
 
-  it('sends service.stop before exit and does not force-kill when the daemon exits', async () => {
+  it('sends service.kill before exit and does not force-kill when the daemon exits', async () => {
     const { bridge, children, killTree } = createShutdownHarness()
     bridge.start()
     const child = children[0]
@@ -449,7 +449,7 @@ describe('PythonBridge.shutdown', () => {
     child.emit('exit', 0, null) // daemon self-exits on stdin EOF
     await done
 
-    expect(methods).toContain('service.stop')
+    expect(methods).toContain('service.kill')
     expect(killTree).not.toHaveBeenCalled()
   })
 
@@ -457,7 +457,7 @@ describe('PythonBridge.shutdown', () => {
     const { bridge, children, killTree } = createShutdownHarness()
     bridge.start()
     const child = children[0]
-    respondToRequests(child) // answer service.stop so we reach the wait-for-exit step
+    respondToRequests(child) // answer service.kill so we reach the wait-for-exit step
 
     const done = bridge.shutdown(50)
     await flushStreams()
@@ -481,7 +481,7 @@ describe('PythonBridge.shutdown', () => {
     expect(killTree).not.toHaveBeenCalled()
   })
 
-  it('returns at once without a service.stop request when there is no daemon', async () => {
+  it('returns at once without a service.kill request when there is no daemon', async () => {
     const { bridge, killTree } = createShutdownHarness()
     // Never start(): child is null (down/disabled). No RPC channel to use.
     await bridge.shutdown(50)

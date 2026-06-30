@@ -267,6 +267,30 @@ class OcrJobRepository:
 
         return None if row is None else _row_to_job(row)
 
+    def reclaim_running_jobs(self, *, now: datetime | str | None = None) -> int:
+        # A 'running' job is one a previous process locked but never finished —
+        # the collector was killed mid-flight (app quit / auto-update restart).
+        # Since the ProcessLock guarantees a single collector, every 'running'
+        # row at startup is orphaned, so reset them to 'pending' and make them
+        # due immediately. attempts is left untouched: an interrupted job was
+        # never tried, so it must not count toward the retry/dead budget.
+        now_iso = _format_utc(_coerce_utc_datetime(now))
+
+        with self.connection:
+            cursor = self.connection.execute(
+                """
+                UPDATE ocr_jobs
+                SET
+                  status = 'pending',
+                  locked_at = NULL,
+                  next_run_at = ?,
+                  updated_at = ?
+                WHERE status = 'running'
+                """,
+                (now_iso, now_iso),
+            )
+            return cursor.rowcount
+
     def mark_done(
         self,
         job_id: str,
