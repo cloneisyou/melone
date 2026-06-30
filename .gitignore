@@ -12,7 +12,6 @@ apps/service/*.spec
 
 docs/dev/*
 docs/prod/*
-!docs/dev/vlm-ocr-bm25-context-rank-plan.md
 .crack/
 
 node_modules/
